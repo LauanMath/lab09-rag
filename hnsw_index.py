@@ -19,6 +19,16 @@ def build_hnsw_index(embeddings: np.ndarray) -> faiss.IndexHNSWFlat:
     return index
 
 
+def save_index(index: faiss.IndexHNSWFlat, path: str) -> None:
+    """Persiste o índice HNSW em disco para reutilização sem re-indexar."""
+    faiss.write_index(index, path)
+
+
+def load_index(path: str) -> faiss.IndexHNSWFlat:
+    """Carrega um índice HNSW previamente salvo em disco."""
+    return faiss.read_index(path)
+
+
 def hnsw_search(
     query_vec: np.ndarray,
     index: faiss.IndexHNSWFlat,
