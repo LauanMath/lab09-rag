@@ -75,61 +75,63 @@ Os 10 candidatos são re-ranqueados pelo modelo `cross-encoder/ms-marco-MiniLM-L
 
 ### Custo de memória do KNN exato
 
-Na busca exata K-Nearest Neighbors, é necessário armazenar todos os vetores e calcular a distância de cada query contra o corpus inteiro:
+Na busca exata K-Nearest Neighbors, é necessário armazenar todos os vetores e calcular a distância de cada query contra o corpus inteiro em tempo de busca:
 
 ```
 RAM_KNN = N × dim × 4 bytes
 ```
 
-Para N = 1 000 000 vetores com dim = 1536 (text-embedding-3-small):
+Para N = 1 000 000 vetores com dim = 384 (all-MiniLM-L6-v2):
 ```
-RAM_KNN ≈ 1M × 1536 × 4 ≈ 5,9 GB
+RAM_KNN ≈ 1M × 384 × 4 ≈ 1,5 GB  (só vetores)
 ```
 
-Tempo de busca: **O(N × dim)** por query — inviável em produção com grandes corpora.
+Tempo de busca: **O(N × dim)** por query — cresce linearmente com o corpus, tornando-se inviável em produção acima de ~100K documentos.
 
 ### Custo de memória do HNSW
 
-O HNSW adiciona uma estrutura de grafo em camadas sobre os vetores brutos. O custo extra depende de dois hiperparâmetros:
+O HNSW adiciona uma estrutura de grafo em camadas hierárquicas sobre os vetores brutos. O custo extra é determinado por dois hiperparâmetros de arquitetura:
 
 **M (número de ligações bidirecionais por nó)**
 
 - Cada nó armazena até `2 × M` vizinhos (IDs inteiros de 4 bytes).
 - Custo extra do grafo: `N × 2M × 4 bytes`
-- M maior → mais conexões → melhor recall → **mais RAM no índice final**
-- Faixa típica: 16–64
+- M maior → grafo mais denso → melhor recall → **mais RAM no índice final**
+- Faixa típica: 16–64. Valor usado neste projeto: `M = 32`.
 
 **ef_construction (tamanho da lista dinâmica na construção)**
 
 - Controla quantos candidatos são avaliados ao inserir cada nó durante o *build*.
-- Afeta apenas a **RAM temporária durante a indexação** — não o índice em produção.
-- ef_construction maior → índice de maior qualidade (recall) → build mais lento.
+- Afeta apenas a **RAM temporária durante a indexação** — não o índice final em produção.
+- ef_construction maior → índice de maior qualidade (recall) → build mais lento, sem custo em produção.
+- Valor usado neste projeto: `ef_construction = 200`.
 
-### Comparação: N = 1M, dim = 1536, M = 32
+### Comparação: N = 1M, dim = 384 (all-MiniLM-L6-v2), M = 32
 
-| Componente         | Fórmula              | Tamanho     |
-|--------------------|----------------------|-------------|
-| Vetores brutos     | N × dim × 4          | ~5,9 GB     |
-| Grafo HNSW (M=32)  | N × 2M × 4           | ~256 MB     |
-| **Total HNSW**     |                      | **~6,2 GB** |
-| **KNN exato**      | apenas vetores brutos | **~5,9 GB** |
+| Componente          | Fórmula               | Tamanho      |
+|---------------------|-----------------------|--------------|
+| Vetores brutos      | N × dim × 4           | ~1,5 GB      |
+| Grafo HNSW (M=32)   | N × 2M × 4            | ~256 MB      |
+| **Total HNSW**      |                       | **~1,76 GB** |
+| **KNN exato**       | apenas vetores brutos  | **~1,5 GB**  |
 
-O HNSW consome **ligeiramente mais RAM** que KNN puro (pela estrutura do grafo), mas reduz o tempo de busca de **O(N)** para **O(log N)**, tornando a consulta viável em produção. A economia real é de **tempo e CPU** — não de memória bruta.
+O HNSW consome **ligeiramente mais RAM** que o KNN puro (pelo grafo extra), mas reduz o tempo de busca de **O(N)** para **O(log N)**, tornando a consulta viável em produção independente do tamanho do corpus.
 
 **Resumo prático:**
 
-| Hiperparâmetro   | Efeito na RAM          | Efeito na qualidade | Efeito em produção |
-|------------------|------------------------|---------------------|-------------------|
-| M maior          | Aumenta (grafo maior)  | Recall maior        | Busca mais lenta  |
-| ef_construction maior | Temporário (build) | Índice melhor    | Sem impacto       |
+| Hiperparâmetro        | Efeito na RAM do índice | Efeito na qualidade     | Efeito em produção        |
+|-----------------------|-------------------------|-------------------------|---------------------------|
+| M maior               | Aumenta (grafo maior)   | Recall maior            | Busca ligeiramente mais lenta |
+| ef_construction maior | Temporário (só no build)| Índice de maior recall  | Nenhum impacto            |
 
-Para grandes corpora (N > 100K), HNSW é a única opção viável; KNN exato se torna computacionalmente proibitivo.
+Para grandes corpora (N > 100K), o HNSW é a única opção viável; o KNN exato se torna computacionalmente proibitivo.
 
 ---
 
 ## Dependências
 
 ```
+torch>=2.0.0
 openai>=1.30.0
 faiss-cpu>=1.7.4
 sentence-transformers>=2.7.0
