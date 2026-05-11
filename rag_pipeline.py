@@ -4,12 +4,12 @@ Lab 09 — Arquitetura RAG Avançada: HNSW + HyDE + Cross-Encoder
 Assistente de busca semântica em manuais médicos.
 
 Uso:
-    export OPENAI_API_KEY="sk-..."
+    python rag_pipeline.py
+
+    Para usar a OpenAI API no Passo 2 (opcional):
+    $env:OPENAI_API_KEY="sk-..."
     python rag_pipeline.py
 """
-
-import os
-from openai import OpenAI
 
 from corpus import MEDICAL_DOCS
 from embeddings import embed
@@ -18,7 +18,7 @@ from hyde import generate_hypothetical_document
 from reranker import cross_encoder_rerank
 
 
-def run_pipeline(query: str, client: OpenAI) -> None:
+def run_pipeline(query: str) -> None:
     sep = "─" * 65
 
     # ── PASSO 1: Construção do Índice HNSW ───────────────────────────────────
@@ -26,9 +26,8 @@ def run_pipeline(query: str, client: OpenAI) -> None:
     print("PASSO 1 — Construção do Índice HNSW")
     print(sep)
     print(f"  Corpus  : {len(MEDICAL_DOCS)} fragmentos de manual médico")
-    print("  Gerando embeddings …")
 
-    doc_vecs = embed(MEDICAL_DOCS, client)
+    doc_vecs = embed(MEDICAL_DOCS)
     print(f"  Shape dos embeddings : {doc_vecs.shape}")
 
     index = build_hnsw_index(doc_vecs)
@@ -39,12 +38,12 @@ def run_pipeline(query: str, client: OpenAI) -> None:
     print("PASSO 2 — HyDE: Geração do Documento Hipotético")
     print(sep)
     print(f"  Query coloquial : {query}")
-    print("  Gerando documento hipotético via LLM …")
 
-    hyp_doc = generate_hypothetical_document(query, client)
-    print(f"\n  Documento hipotético:\n    {hyp_doc}")
+    hyp_doc = generate_hypothetical_document(query)
+    print(f"\n  Documento hipotético (gerado por gpt-4o-mini):\n    {hyp_doc}")
 
-    hyde_vec = embed([hyp_doc], client)[0]
+    hyde_vec = embed([hyp_doc])[0]
+    print(f"\n  Vetor HyDE gerado | dim={hyde_vec.shape[0]}")
 
     # ── PASSO 3: Busca Rápida no HNSW — Top-10 ───────────────────────────────
     print(f"\n{sep}")
@@ -74,9 +73,8 @@ def run_pipeline(query: str, client: OpenAI) -> None:
 
 
 def main() -> None:
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     query = "dor de cabeça latejante e luz incomodando muito"
-    run_pipeline(query, client)
+    run_pipeline(query)
 
 
 if __name__ == "__main__":

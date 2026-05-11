@@ -19,7 +19,7 @@ Implementar um pipeline de **Retrieval-Augmented Generation (RAG)** de nível de
 ```
 lab09-rag/
 ├── corpus.py        # Dataset: 22 fragmentos de manuais médicos
-├── embeddings.py    # Módulo de geração de vetores (OpenAI)
+├── embeddings.py    # Módulo de geração de vetores (BERT/HuggingFace)
 ├── hnsw_index.py    # Passo 1 — construção e busca no índice HNSW
 ├── hyde.py          # Passo 2 — geração do documento hipotético (HyDE)
 ├── reranker.py      # Passo 4 — re-ranking com Cross-Encoder
@@ -35,14 +35,10 @@ lab09-rag/
 ```bash
 pip install -r requirements.txt
 
-# Linux/macOS
-export OPENAI_API_KEY="sua-chave-aqui"
-
-# Windows PowerShell
-$env:OPENAI_API_KEY="sua-chave-aqui"
-
 python rag_pipeline.py
 ```
+
+> **OpenAI API (opcional):** Se `OPENAI_API_KEY` estiver configurado, o Passo 2 usa o `gpt-4o-mini` para gerar o documento hipotético em tempo real. Sem a chave, o pipeline usa o documento pré-gerado pelo mesmo modelo.
 
 ---
 
@@ -50,7 +46,7 @@ python rag_pipeline.py
 
 ### Passo 1 — Construção do Índice HNSW
 
-22 fragmentos de manuais médicos são convertidos em vetores densos com `text-embedding-3-small` (OpenAI) e indexados num grafo HNSW via FAISS. Os vetores são normalizados para unidade antes da indexação, de modo que o produto interno equivale à **similaridade de cosseno**.
+22 fragmentos de manuais médicos são convertidos em vetores densos com o modelo BERT `all-MiniLM-L6-v2` (HuggingFace / sentence-transformers) e indexados num grafo HNSW via FAISS. Os vetores são normalizados para unidade antes da indexação, de modo que o produto interno equivale à **similaridade de cosseno**.
 
 ```python
 index = faiss.IndexHNSWFlat(dim, M=32, faiss.METRIC_INNER_PRODUCT)
@@ -59,7 +55,7 @@ index.hnsw.efConstruction = 200
 
 ### Passo 2 — HyDE (Hypothetical Document Embeddings)
 
-Quando o paciente digita `"dor de cabeça latejante e luz incomodando muito"`, o LLM (`gpt-4o-mini`) é instruído a **alucinar** um trecho técnico de manual que descreveria esse quadro — por exemplo:
+Quando o paciente digita `"dor de cabeça latejante e luz incomodando muito"`, o LLM (`gpt-4o-mini` via OpenAI API) é instruído a **alucinar** um trecho técnico de manual que descreveria esse quadro — por exemplo:
 
 > *"Cefaleia pulsátil unilateral acompanhada de fotofobia intensa e fonofobia, compatível com episódio de enxaqueca sem aura…"*
 

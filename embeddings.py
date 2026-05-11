@@ -1,16 +1,24 @@
 import numpy as np
 import faiss
-from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 
-EMBED_MODEL = "text-embedding-3-small"
+EMBED_MODEL = "all-MiniLM-L6-v2"   # BERT-based model (HuggingFace)
+_model: SentenceTransformer | None = None
 
 
-def embed(texts: list[str], client: OpenAI) -> np.ndarray:
+def _get_model() -> SentenceTransformer:
+    global _model
+    if _model is None:
+        print(f"  [Embedding] Carregando modelo '{EMBED_MODEL}' …")
+        _model = SentenceTransformer(EMBED_MODEL)
+    return _model
+
+
+def embed(texts: list[str]) -> np.ndarray:
     """
-    Gera vetores normalizados (L2=1) para uma lista de textos via OpenAI Embeddings.
-    Vetores unitários permitem usar produto interno como similaridade de cosseno.
+    Gera vetores normalizados (L2=1) usando modelo BERT (sentence-transformers).
+    normalize_embeddings=True → produto interno == similaridade de cosseno.
     """
-    resp = client.embeddings.create(input=texts, model=EMBED_MODEL)
-    vecs = np.array([e.embedding for e in resp.data], dtype=np.float32)
-    faiss.normalize_L2(vecs)
-    return vecs
+    model = _get_model()
+    vecs = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+    return vecs.astype(np.float32)
